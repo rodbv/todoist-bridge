@@ -1,0 +1,30 @@
+[project]
+name = "todoist-bridge"
+version = "0.1.0"
+description = "Sync Google Tasks and Todoist so voice assistants that only speak Google Tasks can manage Todoist"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Rodrigo Vieira", email = "rodrigo.vieira@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "httpx>=0.28",
+]
+
+[project.scripts]
+todoist-bridge = "todoist_bridge.cli:main"
+
+[dependency-groups]
+dev = [
+    "modal>=1.0",
+    "pytest>=8",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.7,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
