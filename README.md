@@ -35,7 +35,7 @@ In the [Google Cloud console](https://console.cloud.google.com/), signed in with
 
 1. Create a project and enable the **Google Tasks API**.
 2. Configure the OAuth consent screen as **External** and add your account as a test user.
-3. **Publish** the app (status "In production"). A refresh token from an app in "Testing" status expires after 7 days.
+3. **Publish** the app (status "In production"). A refresh token from an app in "Testing" status expires after 7 days. Publishing requires a home page URL and a privacy policy URL on the Branding page: use your fork's URL and its [PRIVACY.md](PRIVACY.md), and add `github.com` to the authorized domains. Leave the logo empty, because a logo requires brand verification.
 4. Create an OAuth client of type **Desktop app**. Put its id and secret in `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
 
 Then get a refresh token:
