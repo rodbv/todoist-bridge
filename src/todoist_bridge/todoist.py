@@ -74,10 +74,12 @@ class TodoistClient:
                 return tasks
             params["cursor"] = cursor
 
+    def user(self) -> dict[str, Any]:
+        return self._request("GET", "/user")
+
     def _user_timezone(self) -> ZoneInfo:
         if self._timezone is None:
-            user = self._request("GET", "/user")
-            self._timezone = ZoneInfo(user["tz_info"]["timezone"])
+            self._timezone = ZoneInfo(self.user()["tz_info"]["timezone"])
         return self._timezone
 
     def _request(self, method: str, path: str, *, missing_ok: bool = False, **kwargs: Any) -> Any:

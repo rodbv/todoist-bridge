@@ -6,6 +6,7 @@ import argparse
 import json
 import logging
 import os
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -22,16 +23,16 @@ REQUIRED_ENV = (
 )
 
 
-def run_sync(*, dry_run: bool = False) -> Stats:
-    if missing := [name for name in REQUIRED_ENV if not os.environ.get(name)]:
+def run_sync(*, dry_run: bool = False, env: Mapping[str, str] = os.environ) -> Stats:
+    if missing := [name for name in REQUIRED_ENV if not env.get(name)]:
         raise SystemExit(f"Missing environment variables: {', '.join(missing)}")
     google: GoogleTasks = GoogleTasksClient(
-        os.environ["GOOGLE_CLIENT_ID"],
-        os.environ["GOOGLE_CLIENT_SECRET"],
-        os.environ["GOOGLE_REFRESH_TOKEN"],
-        tasklist=os.environ.get("GOOGLE_TASKLIST", "@default"),
+        env["GOOGLE_CLIENT_ID"],
+        env["GOOGLE_CLIENT_SECRET"],
+        env["GOOGLE_REFRESH_TOKEN"],
+        tasklist=env.get("GOOGLE_TASKLIST") or "@default",
     )
-    todoist: Todoist = TodoistClient(os.environ["TODOIST_API_TOKEN"])
+    todoist: Todoist = TodoistClient(env["TODOIST_API_TOKEN"])
     if dry_run:
         google, todoist = DryRunGoogleTasks(google), DryRunTodoist(todoist)
     return sync(google, todoist, datetime.now(UTC))
