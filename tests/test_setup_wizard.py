@@ -1,0 +1,201 @@
+import stat
+from pathlib import Path
+
+import pytest
+
+from todoist_bridge.gemini import SAVED_INFO_EN, SAVED_INFO_PT
+from todoist_bridge.setup_wizard import SetupWizard, read_env, write_env
+from todoist_bridge.sync import Stats
+
+README = Path(__file__).parent.parent / "README.md"
+
+WORKING_ENV = {
+    "TODOIST_API_TOKEN": "todoist-token",
+    "GOOGLE_CLIENT_ID": "client-id",
+    "GOOGLE_CLIENT_SECRET": "client-secret",
+    "GOOGLE_REFRESH_TOKEN": "refresh-token",
+}
+USER = {"full_name": "Ana", "lang": "en"}
+
+
+class ScriptedConsole:
+    """Answers each prompt with the next scripted answer for the first matching key,
+    or with Enter when no key matches."""
+
+    def __init__(self, answers: dict[str, list[str]] | None = None) -> None:
+        self._answers = answers or {}
+        self.prompts: list[str] = []
+        self.output: list[str] = []
+
+    def ask(self, prompt: str, *, secret: bool = False) -> str:
+        self.prompts.append(prompt)
+        for key, queue in self._answers.items():
+            if key in prompt and queue:
+                return queue.pop(0)
+        return ""
+
+    def say(self, text: str = "") -> None:
+        self.output.append(text)
+
+    def printed(self) -> str:
+        return "\n".join(self.output)
+
+
+class FakeModal:
+    def __init__(self, *, logged_in: bool = True) -> None:
+        self.is_logged_in = logged_in
+        self.secret: dict[str, str] | None = None
+        self.deployed = False
+
+    def logged_in(self) -> bool:
+        return self.is_logged_in
+
+    def login(self) -> None:
+        self.is_logged_in = True
+
+    def put_secret(self, values):
+        self.secret = dict(values)
+
+    def deploy(self) -> None:
+        self.deployed = True
+
+
+@pytest.fixture
+def env_path(tmp_path) -> Path:
+    return tmp_path / ".env"
+
+
+def make_wizard(env_path, console, modal=None, **overrides):
+    options = {
+        "todoist_user": lambda token: USER,
+        "check_google": lambda client_id, secret, refresh: "ok",
+        "obtain_refresh_token": lambda client_id, secret: "new-refresh-token",
+        "dry_run": lambda env: Stats(),
+        "open_url": lambda url: None,
+    }
+    options.update(overrides)
+    return SetupWizard(env_path, console=console, modal=modal or FakeModal(), **options)
+
+
+def test_working_credentials_skip_their_prompts_and_deploy(env_path):
+    write_env(env_path, {**WORKING_ENV, "GOOGLE_TASKLIST": "list-1"})
+    console, modal = ScriptedConsole(), FakeModal()
+
+    exit_code = make_wizard(env_path, console, modal).run()
+
+    assert exit_code == 0
+    assert not [p for p in console.prompts if "token:" in p or "client" in p]
+    assert "No changes: Google Tasks and Todoist are already in sync." in console.output
+    assert modal.deployed
+    assert modal.secret == {**WORKING_ENV, "GOOGLE_TASKLIST": "list-1"}
+
+
+def test_rejected_todoist_token_asks_again(env_path):
+    write_env(env_path, {k: v for k, v in WORKING_ENV.items() if k != "TODOIST_API_TOKEN"})
+    console = ScriptedConsole({"Todoist API token": ["bad", "good"]})
+
+    make_wizard(env_path, console, todoist_user=lambda t: USER if t == "good" else None).run()
+
+    assert "Todoist did not accept that token." in console.output
+    assert read_env(env_path)["TODOIST_API_TOKEN"] == "good"
+
+
+def test_rejected_google_client_asks_for_the_client_again(env_path):
+    write_env(env_path, {"TODOIST_API_TOKEN": "todoist-token"})
+    console = ScriptedConsole(
+        {"client id": ["bad-id", "good-id"], "client secret": ["secret", "secret"]}
+    )
+
+    def check_google(client_id, secret, refresh):
+        if client_id == "bad-id":
+            return "invalid_client"
+        return "ok" if refresh == "new-refresh-token" else "invalid_grant"
+
+    make_wizard(env_path, console, check_google=check_google).run()
+
+    saved = read_env(env_path)
+    assert saved["GOOGLE_CLIENT_ID"] == "good-id"
+    assert saved["GOOGLE_REFRESH_TOKEN"] == "new-refresh-token"
+
+
+def test_expired_google_sign_in_asks_to_sign_in_again(env_path):
+    write_env(env_path, WORKING_ENV)
+    console = ScriptedConsole()
+
+    def check_google(client_id, secret, refresh):
+        return "ok" if refresh == "new-refresh-token" else "invalid_grant"
+
+    make_wizard(env_path, console, check_google=check_google).run()
+
+    assert read_env(env_path)["GOOGLE_REFRESH_TOKEN"] == "new-refresh-token"
+
+
+def test_declining_the_import_of_google_tasks_stops_before_deploy(env_path):
+    write_env(env_path, WORKING_ENV)
+    console, modal = ScriptedConsole({"Continue?": ["n"]}), FakeModal()
+
+    exit_code = make_wizard(
+        env_path, console, modal, dry_run=lambda env: Stats(created_in_todoist=2)
+    ).run()
+
+    assert exit_code == 1
+    assert modal.secret is None
+    assert not modal.deployed
+
+
+def test_declining_the_deploy_keeps_the_modal_secret_unchanged(env_path):
+    write_env(env_path, WORKING_ENV)
+    modal = FakeModal()
+
+    make_wizard(env_path, ScriptedConsole({"Deploy": ["n"]}), modal).run()
+
+    assert modal.secret is None
+    assert not modal.deployed
+
+
+def test_missing_modal_login_signs_in_before_deploy(env_path):
+    write_env(env_path, WORKING_ENV)
+    modal = FakeModal(logged_in=False)
+
+    make_wizard(env_path, ScriptedConsole(), modal).run()
+
+    assert modal.deployed
+
+
+@pytest.mark.parametrize(("lang", "text"), [("pt_BR", SAVED_INFO_PT), ("en", SAVED_INFO_EN)])
+def test_gemini_text_follows_the_todoist_language(env_path, lang, text):
+    write_env(env_path, WORKING_ENV)
+    console = ScriptedConsole()
+
+    make_wizard(env_path, console, todoist_user=lambda t: {**USER, "lang": lang}).run()
+
+    assert text in console.output
+
+
+def test_links_open_in_the_browser_unless_skipped(env_path):
+    write_env(env_path, {k: v for k, v in WORKING_ENV.items() if k != "TODOIST_API_TOKEN"})
+    opened: list[str] = []
+    console = ScriptedConsole({"Press Enter to open it": ["", "s"], "Todoist API token": ["t"]})
+
+    make_wizard(env_path, console, open_url=opened.append).run()
+
+    assert opened == ["https://app.todoist.com/app/settings/integrations/developer"]
+    assert "  https://gemini.google.com/saved-info" in console.output
+
+
+def test_env_file_is_private_and_keeps_unrelated_lines(env_path):
+    env_path.write_text("# my settings\nGOOGLE_TASKLIST=list-1\nTODOIST_API_TOKEN=old\n")
+
+    write_env(env_path, {"TODOIST_API_TOKEN": "new", "GOOGLE_CLIENT_ID": "id"})
+
+    assert env_path.read_text() == (
+        "# my settings\nGOOGLE_TASKLIST=list-1\nTODOIST_API_TOKEN=new\nGOOGLE_CLIENT_ID=id\n"
+    )
+    assert stat.S_IMODE(env_path.stat().st_mode) == 0o600
+
+
+def test_readme_shows_the_same_saved_info_text_as_the_wizard():
+    readme = README.read_text()
+
+    assert SAVED_INFO_PT in readme
+    assert SAVED_INFO_EN in readme

@@ -8,6 +8,7 @@ import logging
 import os
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from todoist_bridge.google_tasks import GoogleTasksClient
@@ -110,9 +111,13 @@ def main(argv: list[str] | None = None) -> int:
         "--dry-run", action="store_true", help="read both sides and print the writes"
     )
     commands.add_parser("auth", help="obtain a Google refresh token in the browser")
+    commands.add_parser("setup", help="set up credentials, deploy to Modal, configure Gemini")
     args = parser.parse_args(argv)
 
     configure_logging()
+
+    if args.command == "setup":
+        return run_setup()
 
     if args.command == "auth":
         client_id = os.environ.get("GOOGLE_CLIENT_ID") or input("Google OAuth client id: ")
@@ -124,3 +129,17 @@ def main(argv: list[str] | None = None) -> int:
     stats = run_sync(dry_run=args.dry_run)
     print(json.dumps(stats.as_dict(), ensure_ascii=False))
     return 1 if stats.errors else 0
+
+
+def run_setup() -> int:
+    from todoist_bridge.setup_wizard import ModalCli, SetupWizard
+
+    app_file = Path("modal_app.py")
+    if not app_file.exists():
+        raise SystemExit("Run setup from the todoist-bridge folder, where modal_app.py is.")
+    wizard = SetupWizard(
+        Path(".env"),
+        dry_run=lambda env: run_sync(dry_run=True, env=env),
+        modal=ModalCli(app_file),
+    )
+    return wizard.run()
