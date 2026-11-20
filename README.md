@@ -9,9 +9,9 @@ Gemini (Android Auto, Google Assistant) creates, reads aloud and completes Googl
 - **Voice capture:** a new task in Google Tasks goes to Todoist through [Quick Add](https://www.todoist.com/help/articles/use-task-quick-add-in-todoist-va4Lhpzz), so Todoist parses dates, `#project`, `@label` and `p1` in your account language. Spoken prefixes such as "remind me to" or "me lembra de" are removed first.
 - **Today's list:** Todoist tasks due today or overdue appear in Google Tasks, so "what are my tasks for today?" reads your Todoist tasks.
 - **Completion:** completing a task on either side completes it on the other.
-- **Rescheduling:** when a task the bridge copied into Google Tasks moves to a future date in Todoist, the bridge deletes the copy. A task you created by voice stays in Google Tasks until it is done in Todoist, because Google may repeat it: deleting a recurring Google task makes Google create its next instance.
+- **Rescheduling:** when a task the bridge copied into Google Tasks moves to a future date in Todoist, the bridge deletes the copy. A task you created by voice stays in Google Tasks until it is done in Todoist, because Google may repeat it: deleting a recurring Google task makes Google create its next instance. While it waits, it takes its title and date from Todoist.
 
-Todoist is the source of truth. Google Tasks holds only what is due now. The Todoist id of each mirrored task lives in the Google task notes (`todoist:<id>`), so the bridge needs no database.
+Todoist is the source of truth. Google Tasks holds only what is due now. If you edit a title in Google Tasks, the next sync puts the Todoist title back. The Todoist id of each mirrored task lives in the Google task notes (`todoist:<id>`), so the bridge needs no database.
 
 ## Setup
 
@@ -94,6 +94,9 @@ Gemini follows Saved Info most of the time, not always. If a task reaches Todois
 - The `todoist:<id>` marker is visible in the task notes if you open the Google Tasks app.
 - Gemini can complete only tasks that are in Google Tasks: Todoist tasks due today or overdue, plus the tasks you created by voice.
 - A task completed in Google Tasks before the next sync, and never synced, does not reach Todoist.
+- If you mark a completed Google task as not done, the bridge sends it to Todoist as a new task. Reopen it in Todoist instead.
+- Quick Add treats some words as commands and removes them from the title: a date or time ("23h"), or "no date" in your account language ("sem data" in Portuguese).
+- A Todoist task with a deadline but no due date does not appear in Google Tasks.
 
 ## Development
 
