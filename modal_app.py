@@ -5,7 +5,6 @@ Secret ``todoist-bridge``, created from the same variables as ``.env``.
 """
 
 import json
-import logging
 
 import modal
 
@@ -26,8 +25,8 @@ image = (
     max_containers=1,
 )
 def sync_every_minute() -> None:
-    from todoist_bridge.cli import run_sync
+    from todoist_bridge.cli import configure_logging, run_sync
 
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    configure_logging()
     stats = run_sync()
     print(json.dumps(stats.as_dict(), ensure_ascii=False))

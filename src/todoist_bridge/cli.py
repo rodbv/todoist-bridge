@@ -82,6 +82,12 @@ class DryRunTodoist:
         _would(f"close Todoist task {task_id}")
 
 
+def configure_logging() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    # httpx logs every request at INFO, which buries the sync stats in cron logs.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
 def _would(action: str, **fields: Any) -> None:
     details = ", ".join(f"{key}={value!r}" for key, value in fields.items())
     print(f"[dry run] would {action}" + (f": {details}" if details else ""))
@@ -99,7 +105,7 @@ def main(argv: list[str] | None = None) -> int:
     commands.add_parser("auth", help="obtain a Google refresh token in the browser")
     args = parser.parse_args(argv)
 
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    configure_logging()
 
     if args.command == "auth":
         client_id = os.environ.get("GOOGLE_CLIENT_ID") or input("Google OAuth client id: ")
