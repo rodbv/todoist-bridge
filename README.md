@@ -15,27 +15,43 @@ Todoist is the source of truth. Google Tasks holds only what is due now. If you 
 
 ## Setup
 
-You need [uv](https://docs.astral.sh/uv/), a Todoist account, a Google account and a [Modal](https://modal.com) account.
+You need [uv](https://docs.astral.sh/uv/getting-started/installation/), a Todoist account, the Google account your phone uses and a [Modal](https://modal.com) account. Modal's free monthly credits cover the sync.
 
 ```bash
 git clone https://github.com/rodbv/todoist-bridge && cd todoist-bridge
 uv sync
+uv run todoist-bridge setup
+```
+
+The wizard asks for each credential and opens the page where you find it. It checks each value, shows what the first sync will change, deploys to Modal and prints the text to paste into Gemini. Run it again at any time to fix a credential or deploy again.
+
+### Set up with an AI agent
+
+If you use an agent that runs commands, such as Claude Code or Gemini CLI, paste this prompt into it:
+
+```text
+Set up https://github.com/rodbv/todoist-bridge on this computer. Install uv if it is missing (https://docs.astral.sh/uv/getting-started/installation/), clone the repository and run "uv sync" in it. Then tell me to run "uv run todoist-bridge setup" myself, in a terminal inside the repository folder, because the wizard asks for API tokens and secrets. Never ask me to paste a token, a client secret or the .env file into this chat, and never read the .env file. If the wizard shows an error, help me fix it from the error message and the README.
+```
+
+## Manual setup
+
+```bash
 cp .env.example .env
 ```
 
-### 1. Todoist
+### Todoist
 
 Copy your API token from Todoist Settings, Integrations, Developer into `TODOIST_API_TOKEN`.
 
 Quick Add parses dates in the language of your Todoist account. If you speak Portuguese to your assistant, set Todoist to Portuguese.
 
-### 2. Google OAuth client
+### Google OAuth client
 
 In the [Google Cloud console](https://console.cloud.google.com/), signed in with the account your phone uses:
 
 1. Create a project and enable the **Google Tasks API**.
 2. Configure the OAuth consent screen as **External** and add your account as a test user.
-3. **Publish** the app (status "In production"). A refresh token from an app in "Testing" status expires after 7 days. Publishing requires a home page URL and a privacy policy URL on the Branding page: use your fork's URL and its [PRIVACY.md](PRIVACY.md), and add `github.com` to the authorized domains. Leave the logo empty, because a logo requires brand verification.
+3. **Publish** the app (status "In production"). A refresh token from an app in "Testing" status expires after 7 days. Publishing requires a home page URL and a privacy policy URL on the Branding page: use https://github.com/rodbv/todoist-bridge and its [PRIVACY.md](PRIVACY.md), and add `github.com` to the authorized domains. Leave the logo empty, because a logo requires brand verification.
 4. Create an OAuth client of type **Desktop app**. Put its id and secret in `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
 
 Then get a refresh token:
@@ -46,7 +62,7 @@ uv run --env-file .env todoist-bridge auth
 
 The browser shows "Google hasn't verified this app". Choose Advanced, then continue: you are the developer of this app. Put the printed token in `GOOGLE_REFRESH_TOKEN`.
 
-### 3. Dry run
+### Dry run
 
 On the first run the bridge sends every open task in your Google Tasks list to Todoist. Check what it would do first:
 
@@ -60,7 +76,7 @@ Then run it for real once:
 uv run --env-file .env todoist-bridge sync
 ```
 
-### 4. Deploy to Modal
+### Deploy to Modal
 
 ```bash
 uv run modal setup
@@ -72,9 +88,9 @@ The function runs every minute and prints its stats as JSON. Read them with `uv 
 
 To run the sync somewhere else, call `todoist-bridge sync` from cron or a systemd timer with the same environment variables.
 
-### 5. Teach Gemini to save tasks with the time in the title
+## Teach Gemini to save tasks with the time in the title
 
-Google Tasks stores only the date of a task, not the time, and Gemini removes the time from the title unless told otherwise. Add this to [Saved Info](https://gemini.google.com/saved-info), so that any command with a date becomes a task whose title Todoist can parse:
+Google Tasks stores only the date of a task, not the time, and Gemini removes the time from the title unless told otherwise. The setup wizard prints this text in your Todoist language. Add it to [Saved Info](https://gemini.google.com/saved-info), so that any command with a date becomes a task whose title Todoist can parse:
 
 ```text
 Quando eu disser uma frase no imperativo com uma data ou hora, absoluta ou relativa, crie uma tarefa no Google Tasks, na lista Minhas tarefas, sem pedir confirmação. Exemplos: "ligar pro dentista amanhã às 9h30", "pagar a conta sexta", "regar as plantas em 10 minutos", "tirar o lixo toda quinta às 22h". Use a frase inteira como título da tarefa, com a data, a hora e a repetição exatamente como eu falei. Nunca remova do título as expressões de data, hora ou repetição. Nunca crie tarefas recorrentes no Google Tasks: escreva a repetição no título, por exemplo "tomar remédio todo dia às 22h15", e o Todoist cuida da repetição. Não use o Google Keep nem lembretes do Assistente.
