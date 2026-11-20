@@ -1,6 +1,6 @@
 # todoist-bridge
 
-Sync Google Tasks and Todoist so voice assistants that only speak Google Tasks can manage Todoist.
+Use Todoist hands-free from Android Auto, Gemini and Google Assistant, by syncing Google Tasks and Todoist.
 
 Gemini (Android Auto, Google Assistant) creates, reads aloud and completes Google Tasks, but it has no Todoist integration. todoist-bridge runs every minute and keeps one Google Tasks list in sync with Todoist, so you can say "remind me to buy milk tomorrow at 4pm" in the car and find the task in Todoist.
 
