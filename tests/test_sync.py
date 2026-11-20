@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 import pytest
 from fakes import FakeGoogleTasks, FakeTodoist
 
-from todoist_bridge.sync import linked_todoist_id, strip_spoken_prefix, sync
+from todoist_bridge.sync import linked_todoist_id, strip_spoken_prefix, sync, todoist_due_date
 
 NOW = datetime(2026, 11, 19, 12, 0, tzinfo=UTC)
 
@@ -40,6 +40,21 @@ def run(google, todoist):
 )
 def test_strip_spoken_prefix_removes_only_leading_voice_commands(spoken, expected):
     assert strip_spoken_prefix(spoken) == expected
+
+
+@pytest.mark.parametrize(
+    ("due", "expected"),
+    [
+        ({"date": "2026-11-19"}, "2026-11-19"),
+        ({"date": "2026-11-19T23:00:00"}, "2026-11-19"),
+        ({"date": "2026-11-20T02:00:00Z", "timezone": "America/Sao_Paulo"}, "2026-11-19"),
+        ({"date": "2026-11-20T02:00:00Z"}, "2026-11-20"),
+        (None, None),
+    ],
+    ids=["date_only", "floating_time", "utc_instant_in_sao_paulo", "utc_instant_no_zone", "none"],
+)
+def test_todoist_due_date_is_the_local_day_the_user_sees(due, expected):
+    assert todoist_due_date({"due": due}) == expected
 
 
 def test_voice_capture_creates_todoist_task_and_links_the_google_task(google, todoist):
@@ -118,6 +133,16 @@ def test_overdue_todoist_task_is_mirrored_and_future_task_is_not(google, todoist
     run(google, todoist)
 
     assert [g["title"] for g in google.tasks.values()] == ["atrasada"]
+
+
+def test_late_evening_todoist_task_gets_its_local_day_in_google(google, todoist):
+    ttask = todoist.add("pagar boleto")
+    ttask["due"] = {"date": "2026-11-20T02:00:00Z", "timezone": "America/Sao_Paulo"}
+
+    run(google, todoist)
+
+    (gtask,) = google.tasks.values()
+    assert gtask["due"] == "2026-11-19T00:00:00.000Z"
 
 
 def test_second_run_without_changes_writes_nothing(google, todoist):

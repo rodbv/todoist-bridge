@@ -7,7 +7,7 @@ import re
 from datetime import date, datetime
 from typing import Any
 
-from todoist_bridge.sync import Task
+from todoist_bridge.sync import Task, todoist_due_date
 
 TODAY = date(2026, 11, 19)
 
@@ -82,12 +82,13 @@ class FakeTodoist:
         return [
             dict(t)
             for t in self.tasks.values()
-            if not t["checked"] and t["due"] and t["due"]["date"][:10] <= TODAY.isoformat()
+            if not t["checked"] and (todoist_due_date(t) or "9999") <= TODAY.isoformat()
         ]
 
     def get_task(self, task_id: str) -> Task | None:
+        """Like the API: completed tasks come back with checked set, deleted ones as None."""
         task = self.tasks.get(task_id)
-        return dict(task) if task and not task["checked"] else None
+        return dict(task) if task else None
 
     def close_task(self, task_id: str) -> None:
         self.writes.append(("close", task_id))

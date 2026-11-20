@@ -1,5 +1,6 @@
 import json
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -86,25 +87,67 @@ def test_todoist_quick_add_asks_for_the_default_reminder():
     }
 
 
+SAO_PAULO = ZoneInfo("America/Sao_Paulo")
+OVERDUE = {"date": "2000-01-01"}
+
+
+NOW_IN_SAO_PAULO = datetime(2026, 11, 19, 21, 30, tzinfo=SAO_PAULO)
+
+
+def todoist_with_user_in_sao_paulo(filter_handler):
+    def handler(request):
+        if request.url.path == "/api/v1/user":
+            return httpx.Response(200, json={"tz_info": {"timezone": "America/Sao_Paulo"}})
+        return filter_handler(request)
+
+    http, requests = recording_client(handler)
+    client = TodoistClient("token", http=http, clock=lambda tz: NOW_IN_SAO_PAULO.astimezone(tz))
+    return client, requests
+
+
 def test_todoist_due_tasks_follows_the_cursor():
     def handler(request):
-        assert request.url.params["query"] == "today | overdue"
+        assert request.url.params["query"] == "today | overdue | tomorrow"
         if request.url.params.get("cursor") == "c2":
-            return httpx.Response(200, json={"results": [{"id": "t2"}], "next_cursor": None})
-        return httpx.Response(200, json={"results": [{"id": "t1"}], "next_cursor": "c2"})
+            return httpx.Response(
+                200, json={"results": [{"id": "t2", "due": OVERDUE}], "next_cursor": None}
+            )
+        return httpx.Response(
+            200, json={"results": [{"id": "t1", "due": OVERDUE}], "next_cursor": "c2"}
+        )
 
-    http, _ = recording_client(handler)
+    client, _ = todoist_with_user_in_sao_paulo(handler)
 
-    assert [t["id"] for t in TodoistClient("token", http=http).due_tasks()] == ["t1", "t2"]
+    assert [t["id"] for t in client.due_tasks()] == ["t1", "t2"]
 
 
 def test_todoist_due_tasks_accepts_a_plain_list_response():
-    http, _ = recording_client(lambda request: httpx.Response(200, json=[{"id": "t1"}]))
+    client, _ = todoist_with_user_in_sao_paulo(
+        lambda request: httpx.Response(200, json=[{"id": "t1", "due": OVERDUE}])
+    )
 
-    assert TodoistClient("token", http=http).due_tasks() == [{"id": "t1"}]
+    assert [t["id"] for t in client.due_tasks()] == ["t1"]
 
 
-def test_todoist_get_task_returns_none_for_completed_or_deleted_task():
+def test_todoist_due_tasks_keeps_tonight_and_drops_tomorrow_by_local_day():
+    tasks = [
+        {
+            "id": "tonight",
+            "due": {"date": "2026-11-20T02:00:00Z", "timezone": "America/Sao_Paulo"},
+        },
+        {"id": "today", "due": {"date": "2026-11-19"}},
+        {"id": "tomorrow", "due": {"date": "2026-11-20"}},
+        {"id": "tomorrow-at-10", "due": {"date": "2026-11-20T10:00:00"}},
+        {"id": "undated", "due": None},
+    ]
+    client, _ = todoist_with_user_in_sao_paulo(
+        lambda request: httpx.Response(200, json={"results": tasks, "next_cursor": None})
+    )
+
+    assert [t["id"] for t in client.due_tasks()] == ["tonight", "today"]
+
+
+def test_todoist_get_task_returns_none_for_deleted_task():
     http, _ = recording_client(lambda request: httpx.Response(404))
 
     assert TodoistClient("token", http=http).get_task("t1") is None

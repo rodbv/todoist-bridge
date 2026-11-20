@@ -13,6 +13,7 @@ import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Protocol
+from zoneinfo import ZoneInfo
 
 log = logging.getLogger(__name__)
 
@@ -80,8 +81,14 @@ def google_due(date: str) -> str:
 
 
 def todoist_due_date(ttask: Task) -> str | None:
+    """Return the local due day; fixed-timezone tasks arrive as UTC instants ("...Z")."""
     due = ttask.get("due")
-    return due["date"][:10] if due else None
+    if not due:
+        return None
+    if not due["date"].endswith("Z"):
+        return due["date"][:10]
+    instant = datetime.fromisoformat(due["date"])
+    return instant.astimezone(ZoneInfo(due.get("timezone") or "UTC")).date().isoformat()
 
 
 def sync(google: GoogleTasks, todoist: Todoist, now: datetime) -> Stats:
