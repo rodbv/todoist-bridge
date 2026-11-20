@@ -280,3 +280,43 @@ def test_several_completed_google_tasks_linked_to_one_todoist_task_close_it_once
 
     assert stats.closed_in_todoist == 1
     assert todoist.tasks[tid]["due"]["date"] == "2026-11-21"
+
+
+def test_recurring_task_completed_in_both_apps_before_a_sync_moves_one_occurrence(google, todoist):
+    ttask = todoist.add("tomar remédio", due="2026-11-19")
+    ttask["due"].update(string="todo dia", is_recurring=True)
+    run(google, todoist)
+    (gtask,) = google.tasks.values()
+    todoist.close_task(ttask["id"])
+    google.update_task(gtask["id"], status="completed")
+
+    stats = run(google, todoist)
+
+    assert todoist.tasks[ttask["id"]]["due"]["date"] == "2026-11-20"
+    assert stats.closed_in_todoist == 0
+    assert linked_todoist_id(google.tasks[gtask["id"]]) is None
+
+
+def test_task_completed_in_both_apps_before_a_sync_is_not_closed_again(google, todoist):
+    ttask = todoist.add("pagar boleto", due="2026-11-19")
+    run(google, todoist)
+    (gtask,) = google.tasks.values()
+    todoist.close_task(ttask["id"])
+    google.update_task(gtask["id"], status="completed")
+
+    stats = run(google, todoist)
+
+    assert ("close", ttask["id"]) not in todoist.writes
+    assert stats.closed_in_todoist == 0
+
+
+def test_voice_capture_kept_in_google_follows_its_todoist_due_date(google, todoist):
+    gtask = google.add("comprar leite amanhã")
+    run(google, todoist)
+    (tid,) = todoist.tasks
+    todoist.tasks[tid]["due"] = {"date": "2026-11-25"}
+
+    stats = run(google, todoist)
+
+    assert google.tasks[gtask["id"]]["due"].startswith("2026-11-25")
+    assert stats.updated_in_gtasks == 1

@@ -177,12 +177,25 @@ def _close_in_todoist(
     # Deleting a Google series completes all its instances at once; a recurring
     # Todoist task must move forward one occurrence, not one per instance.
     if tid not in closed_ids:
-        todoist.close_task(tid)
         closed_ids.add(tid)
-        stats.closed_in_todoist += 1
+        if _still_open_at_google_occurrence(todoist.get_task(tid), gtask):
+            todoist.close_task(tid)
+            stats.closed_in_todoist += 1
     # Without the marker, later runs ignore this task, so a recurring Todoist
     # task never gets closed twice.
     google.update_task(gtask["id"], notes=notes_without_marker(gtask))
+
+
+def _still_open_at_google_occurrence(ttask: Task | None, gtask: Task) -> bool:
+    """A recurring task completed in Todoist first already sits on a later date, and a
+    second close would skip one occurrence."""
+    if ttask is None or ttask.get("checked"):
+        return False
+    google_date = (gtask.get("due") or "")[:10]
+    todoist_date = todoist_due_date(ttask)
+    if is_recurring(ttask) and google_date and todoist_date:
+        return todoist_date <= google_date
+    return True
 
 
 def _refresh_mirror(google: GoogleTasks, gtask: Task, ttask: Task, stats: Stats) -> None:
@@ -207,6 +220,8 @@ def _retire_mirror(
     elif not is_voice_capture(gtask):
         google.delete_task(gtask["id"])
         stats.deleted_in_gtasks += 1
+    else:
+        _refresh_mirror(google, gtask, ttask, stats)
     # A voice capture stays until its Todoist task is done: Google cannot say whether
     # it repeats, and removing a recurring one makes Google create the next instance.
 
