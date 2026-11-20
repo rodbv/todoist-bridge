@@ -72,19 +72,21 @@ The function runs every minute and prints its stats as JSON. Read them with `uv 
 
 To run the sync somewhere else, call `todoist-bridge sync` from cron or a systemd timer with the same environment variables.
 
-### 5. Teach Gemini to keep the time in the title
+### 5. Teach Gemini to save tasks with the time in the title
 
-Google Tasks stores only the date of a task, not the time. Ask Gemini to keep the time in the title, where Todoist can parse it. Add this to [Saved Info](https://gemini.google.com/saved-info):
+Google Tasks stores only the date of a task, not the time, and Gemini removes the time from the title unless told otherwise. Add this to [Saved Info](https://gemini.google.com/saved-info), so that any command with a date becomes a task whose title Todoist can parse:
 
 ```text
-Quando eu pedir para criar um lembrete ou uma tarefa, salve sempre no Google Tasks, na lista Minhas tarefas. Mantenha no título a data e a hora exatamente como eu falei, por exemplo "comprar leite amanhã às 16h" ou "ligar para o João em 2 horas". Nunca remova do título as expressões de data e hora.
+Quando eu disser uma frase no imperativo com uma data ou hora, absoluta ou relativa, crie uma tarefa no Google Tasks, na lista Minhas tarefas, sem pedir confirmação. Exemplos: "ligar pro dentista amanhã às 9h30", "pagar a conta sexta", "regar as plantas em 10 minutos", "tirar o lixo toda quinta às 22h". Use a frase inteira como título da tarefa, com a data, a hora e a repetição exatamente como eu falei. Nunca remova do título as expressões de data, hora ou repetição. Não use o Google Keep nem lembretes do Assistente.
 ```
 
 In English:
 
 ```text
-When I ask you to create a reminder or a task, always save it in Google Tasks, in the My Tasks list. Keep the date and time in the title exactly as I said it, for example "buy milk tomorrow at 4pm" or "call John in 2 hours". Never remove date and time expressions from the title.
+When I say an imperative sentence with a date or time, absolute or relative, create a task in Google Tasks, in the My Tasks list, without asking for confirmation. Examples: "call the dentist tomorrow at 9:30am", "pay the bill on Friday", "water the plants in 10 minutes", "take out the trash every Thursday at 10pm". Use the whole sentence as the task title, with the date, time and recurrence exactly as I said them. Never remove date, time or recurrence expressions from the title. Do not use Google Keep or Assistant reminders.
 ```
+
+Gemini follows Saved Info most of the time, not always. If a task reaches Todoist without its time, Gemini removed the time before the bridge saw it.
 
 ## Limitations
 
