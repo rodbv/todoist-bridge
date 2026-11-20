@@ -6,6 +6,7 @@ import argparse
 import json
 import logging
 import os
+import tempfile
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -111,13 +112,20 @@ def main(argv: list[str] | None = None) -> int:
         "--dry-run", action="store_true", help="read both sides and print the writes"
     )
     commands.add_parser("auth", help="obtain a Google refresh token in the browser")
-    commands.add_parser("setup", help="set up credentials, deploy to Modal, configure Gemini")
+    setup_parser = commands.add_parser(
+        "setup", help="set up credentials, deploy to Modal, configure Gemini"
+    )
+    setup_parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="walk through every step without checking values or writing anything",
+    )
     args = parser.parse_args(argv)
 
     configure_logging()
 
     if args.command == "setup":
-        return run_setup()
+        return run_setup(demo=args.demo)
 
     if args.command == "auth":
         client_id = os.environ.get("GOOGLE_CLIENT_ID") or input("Google OAuth client id: ")
@@ -131,8 +139,13 @@ def main(argv: list[str] | None = None) -> int:
     return 1 if stats.errors else 0
 
 
-def run_setup() -> int:
-    from todoist_bridge.setup_wizard import ModalCli, SetupWizard
+def run_setup(*, demo: bool = False) -> int:
+    from todoist_bridge.setup_wizard import ModalCli, SetupWizard, demo_wizard
+
+    if demo:
+        language = "pt_BR" if os.environ.get("LANG", "").startswith("pt") else "en"
+        with tempfile.TemporaryDirectory() as folder:
+            return demo_wizard(Path(folder) / ".env", language=language).run()
 
     app_file = Path("modal_app.py")
     if not app_file.exists():

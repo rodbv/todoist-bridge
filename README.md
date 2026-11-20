@@ -25,6 +25,8 @@ uv run todoist-bridge setup
 
 The wizard asks for each credential and opens the page where you find it. It checks each value, shows what the first sync will change, deploys to Modal and prints the text to paste into Gemini. Run it again at any time to fix a credential or deploy again.
 
+To see every step first, run `uv run todoist-bridge setup --demo`. The demo accepts any value, writes nothing to your `.env` and never calls Todoist, Google or Modal.
+
 ### Set up with an AI agent
 
 If you use an agent that runs commands, such as Claude Code or Gemini CLI, paste this prompt into it:

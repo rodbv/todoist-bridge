@@ -910,6 +910,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
+    { name = "rich" },
     { name = "tzdata" },
 ]
 
@@ -924,6 +925,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.28" },
+    { name = "rich", specifier = ">=15" },
     { name = "tzdata", specifier = ">=2026.6" },
 ]
 
