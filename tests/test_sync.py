@@ -88,15 +88,43 @@ def test_voice_capture_uses_google_due_date_when_todoist_finds_no_date(google, t
     assert next(iter(todoist.tasks.values()))["due"] == {"date": "2026-11-21"}
 
 
-def test_voice_capture_due_later_leaves_google_tasks_on_the_next_run(google, todoist):
+def test_voice_capture_due_later_stays_in_google_tasks(google, todoist):
     gtask = google.add("me lembra de comprar leite amanhã")
     run(google, todoist)
 
     stats = run(google, todoist)
 
-    assert gtask["id"] not in google.tasks
-    assert stats.deleted_in_gtasks == 1
-    assert next(iter(todoist.tasks.values()))["checked"] is False
+    assert gtask["id"] in google.tasks
+    assert stats.deleted_in_gtasks == 0
+    assert google.writes == []
+
+
+def test_recurring_voice_capture_never_multiplies(google, todoist):
+    google.add("me lembra de tomar remédio todo dia", recurring=True)
+
+    for _ in range(5):
+        run(google, todoist)
+
+    assert len(todoist.tasks) == 1
+    (gtask,) = google.pending()
+    assert linked_todoist_id(gtask) == next(iter(todoist.tasks))
+
+
+def test_completing_a_recurring_voice_capture_links_the_next_instance_to_the_same_series(
+    google, todoist
+):
+    gtask = google.add("tomar remédio todo dia", recurring=True)
+    run(google, todoist)
+    (tid,) = todoist.tasks
+    google.update_task(gtask["id"], status="completed")
+
+    for _ in range(3):
+        run(google, todoist)
+
+    assert list(todoist.tasks) == [tid]
+    assert todoist.tasks[tid]["due"]["date"] == "2026-11-21"
+    (next_instance,) = google.pending()
+    assert linked_todoist_id(next_instance) == tid
 
 
 def test_completing_in_google_closes_the_todoist_task_once(google, todoist):
@@ -239,3 +267,16 @@ def test_failure_on_one_task_is_recorded_and_the_rest_still_sync(google, todoist
 
     assert stats.created_in_todoist == 1
     assert stats.errors == ["google task g1: boom"]
+
+
+def test_several_completed_google_tasks_linked_to_one_todoist_task_close_it_once(google, todoist):
+    google.add("tomar remédio todo dia")
+    run(google, todoist)
+    (tid,) = todoist.tasks
+    for _ in range(3):
+        google.add("Tomar remédio", notes=f"todoist:{tid}:voice", status="completed")
+
+    stats = run(google, todoist)
+
+    assert stats.closed_in_todoist == 1
+    assert todoist.tasks[tid]["due"]["date"] == "2026-11-21"

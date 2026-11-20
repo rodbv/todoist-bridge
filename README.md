@@ -9,7 +9,7 @@ Gemini (Android Auto, Google Assistant) creates, reads aloud and completes Googl
 - **Voice capture:** a new task in Google Tasks goes to Todoist through [Quick Add](https://www.todoist.com/help/articles/use-task-quick-add-in-todoist-va4Lhpzz), so Todoist parses dates, `#project`, `@label` and `p1` in your account language. Spoken prefixes such as "remind me to" or "me lembra de" are removed first.
 - **Today's list:** Todoist tasks due today or overdue appear in Google Tasks, so "what are my tasks for today?" reads your Todoist tasks.
 - **Completion:** completing a task on either side completes it on the other.
-- **Rescheduling:** when a mirrored task moves to a future date in Todoist, its Google copy is deleted. A voice task with a future date or no date leaves Google Tasks after it reaches Todoist.
+- **Rescheduling:** when a task the bridge copied into Google Tasks moves to a future date in Todoist, the bridge deletes the copy. A task you created by voice stays in Google Tasks until it is done in Todoist, because Google may repeat it: deleting a recurring Google task makes Google create its next instance.
 
 Todoist is the source of truth. Google Tasks holds only what is due now. The Todoist id of each mirrored task lives in the Google task notes (`todoist:<id>`), so the bridge needs no database.
 
@@ -77,21 +77,22 @@ To run the sync somewhere else, call `todoist-bridge sync` from cron or a system
 Google Tasks stores only the date of a task, not the time, and Gemini removes the time from the title unless told otherwise. Add this to [Saved Info](https://gemini.google.com/saved-info), so that any command with a date becomes a task whose title Todoist can parse:
 
 ```text
-Quando eu disser uma frase no imperativo com uma data ou hora, absoluta ou relativa, crie uma tarefa no Google Tasks, na lista Minhas tarefas, sem pedir confirmação. Exemplos: "ligar pro dentista amanhã às 9h30", "pagar a conta sexta", "regar as plantas em 10 minutos", "tirar o lixo toda quinta às 22h". Use a frase inteira como título da tarefa, com a data, a hora e a repetição exatamente como eu falei. Nunca remova do título as expressões de data, hora ou repetição. Não use o Google Keep nem lembretes do Assistente.
+Quando eu disser uma frase no imperativo com uma data ou hora, absoluta ou relativa, crie uma tarefa no Google Tasks, na lista Minhas tarefas, sem pedir confirmação. Exemplos: "ligar pro dentista amanhã às 9h30", "pagar a conta sexta", "regar as plantas em 10 minutos", "tirar o lixo toda quinta às 22h". Use a frase inteira como título da tarefa, com a data, a hora e a repetição exatamente como eu falei. Nunca remova do título as expressões de data, hora ou repetição. Nunca crie tarefas recorrentes no Google Tasks: escreva a repetição no título, por exemplo "tomar remédio todo dia às 22h15", e o Todoist cuida da repetição. Não use o Google Keep nem lembretes do Assistente.
 ```
 
 In English:
 
 ```text
-When I say an imperative sentence with a date or time, absolute or relative, create a task in Google Tasks, in the My Tasks list, without asking for confirmation. Examples: "call the dentist tomorrow at 9:30am", "pay the bill on Friday", "water the plants in 10 minutes", "take out the trash every Thursday at 10pm". Use the whole sentence as the task title, with the date, time and recurrence exactly as I said them. Never remove date, time or recurrence expressions from the title. Do not use Google Keep or Assistant reminders.
+When I say an imperative sentence with a date or time, absolute or relative, create a task in Google Tasks, in the My Tasks list, without asking for confirmation. Examples: "call the dentist tomorrow at 9:30am", "pay the bill on Friday", "water the plants in 10 minutes", "take out the trash every Thursday at 10pm". Use the whole sentence as the task title, with the date, time and recurrence exactly as I said them. Never remove date, time or recurrence expressions from the title. Never create recurring tasks in Google Tasks: write the recurrence in the title, for example "take my medicine every day at 10:15pm", and Todoist handles the repetition. Do not use Google Keep or Assistant reminders.
 ```
 
 Gemini follows Saved Info most of the time, not always. If a task reaches Todoist without its time, Gemini removed the time before the bridge saw it.
 
 ## Limitations
 
+- If Gemini creates a recurring Google task anyway, each new instance links to the same recurring Todoist task, as long as Todoist parsed the recurrence too.
 - The `todoist:<id>` marker is visible in the task notes if you open the Google Tasks app.
-- Gemini can complete only tasks that are in Google Tasks, which means tasks due today or overdue.
+- Gemini can complete only tasks that are in Google Tasks: Todoist tasks due today or overdue, plus the tasks you created by voice.
 - A task completed in Google Tasks before the next sync, and never synced, does not reach Todoist.
 
 ## Development

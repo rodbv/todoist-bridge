@@ -159,3 +159,21 @@ def test_todoist_close_task_tolerates_a_task_that_is_already_gone():
     TodoistClient("token", http=http).close_task("t1")
 
     assert requests[0].url.path == "/api/v1/tasks/t1/close"
+
+
+def test_todoist_recurring_tasks_uses_the_recurring_filter():
+    http, requests = recording_client(
+        lambda request: httpx.Response(200, json={"results": [{"id": "t1"}], "next_cursor": None})
+    )
+
+    assert TodoistClient("token", http=http).recurring_tasks() == [{"id": "t1"}]
+    assert requests[0].url.params["query"] == "recurring"
+
+
+def test_todoist_delete_task_tolerates_a_task_that_is_already_gone():
+    http, requests = recording_client(lambda request: httpx.Response(404))
+
+    TodoistClient("token", http=http).delete_task("t1")
+
+    assert requests[0].method == "DELETE"
+    assert requests[0].url.path == "/api/v1/tasks/t1"

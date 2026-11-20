@@ -21,7 +21,7 @@ Task = dict[str, Any]
 
 COMPLETED_LOOKBACK = timedelta(days=3)
 
-_MARKER_RE = re.compile(r"\btodoist:(\S+)")
+_MARKER_RE = re.compile(r"\btodoist:([A-Za-z0-9_-]+)(:voice)?")
 _SPOKEN_PREFIX_RE = re.compile(
     r"^\s*(?:todoist|remind me(?: to)?|me lembr[ae](?: de)?|lembrar?(?: de)?)\s*[:,]?\s+",
     re.IGNORECASE,
@@ -41,6 +41,8 @@ class Todoist(Protocol):
     def due_tasks(self) -> list[Task]: ...
     def get_task(self, task_id: str) -> Task | None: ...
     def close_task(self, task_id: str) -> None: ...
+    def delete_task(self, task_id: str) -> None: ...
+    def recurring_tasks(self) -> list[Task]: ...
 
 
 @dataclass
@@ -61,6 +63,19 @@ def strip_spoken_prefix(title: str) -> str:
     while (stripped := _SPOKEN_PREFIX_RE.sub("", title, count=1)) != title:
         title = stripped
     return title.strip()
+
+
+def voice_marker_for(todoist_id: str) -> str:
+    return f"todoist:{todoist_id}:voice"
+
+
+def is_voice_capture(gtask: Task) -> bool:
+    match = _MARKER_RE.search(gtask.get("notes") or "")
+    return bool(match and match.group(2))
+
+
+def is_recurring(ttask: Task) -> bool:
+    return bool((ttask.get("due") or {}).get("is_recurring"))
 
 
 def marker_for(todoist_id: str) -> str:
@@ -96,6 +111,7 @@ def sync(google: GoogleTasks, todoist: Todoist, now: datetime) -> Stats:
     gtasks = google.list_tasks(completed_since=now - COMPLETED_LOOKBACK)
     due_in_todoist = {t["id"]: t for t in todoist.due_tasks()}
     linked_ids = {tid for g in gtasks if (tid := linked_todoist_id(g))}
+    closed_ids: set[str] = set()
 
     for gtask in gtasks:
         tid = linked_todoist_id(gtask)
@@ -104,7 +120,7 @@ def sync(google: GoogleTasks, todoist: Todoist, now: datetime) -> Stats:
             if pending and tid is None:
                 _send_voice_capture_to_todoist(google, todoist, gtask, stats)
             elif not pending and tid is not None:
-                _close_in_todoist(google, todoist, gtask, tid, stats)
+                _close_in_todoist(google, todoist, gtask, tid, closed_ids, stats)
             elif pending and tid in due_in_todoist:
                 _refresh_mirror(google, gtask, due_in_todoist[tid], stats)
             elif pending:
@@ -132,12 +148,18 @@ def _send_voice_capture_to_todoist(
     google: GoogleTasks, todoist: Todoist, gtask: Task, stats: Stats
 ) -> None:
     ttask = todoist.quick_add(strip_spoken_prefix(gtask.get("title") or ""))
-    stats.created_in_todoist += 1
+    if twin := _recurring_twin(todoist, ttask):
+        # A recurring Google task brings back its next instance without the marker;
+        # link that instance to the series already in Todoist.
+        todoist.delete_task(ttask["id"])
+        ttask = twin
+    else:
+        stats.created_in_todoist += 1
     if ttask.get("due") is None and gtask.get("due"):
         ttask = todoist.set_due_date(ttask["id"], gtask["due"][:10])
     changes: dict[str, Any] = {
         "title": ttask["content"],
-        "notes": "\n".join(filter(None, [gtask.get("notes"), marker_for(ttask["id"])])),
+        "notes": "\n".join(filter(None, [gtask.get("notes"), voice_marker_for(ttask["id"])])),
     }
     if date := todoist_due_date(ttask):
         changes["due"] = google_due(date)
@@ -145,10 +167,19 @@ def _send_voice_capture_to_todoist(
 
 
 def _close_in_todoist(
-    google: GoogleTasks, todoist: Todoist, gtask: Task, tid: str, stats: Stats
+    google: GoogleTasks,
+    todoist: Todoist,
+    gtask: Task,
+    tid: str,
+    closed_ids: set[str],
+    stats: Stats,
 ) -> None:
-    todoist.close_task(tid)
-    stats.closed_in_todoist += 1
+    # Deleting a Google series completes all its instances at once; a recurring
+    # Todoist task must move forward one occurrence, not one per instance.
+    if tid not in closed_ids:
+        todoist.close_task(tid)
+        closed_ids.add(tid)
+        stats.closed_in_todoist += 1
     # Without the marker, later runs ignore this task, so a recurring Todoist
     # task never gets closed twice.
     google.update_task(gtask["id"], notes=notes_without_marker(gtask))
@@ -173,9 +204,26 @@ def _retire_mirror(
     if ttask is None or ttask.get("checked"):
         google.update_task(gtask["id"], status="completed", notes=notes_without_marker(gtask))
         stats.closed_in_gtasks += 1
-    else:
+    elif not is_voice_capture(gtask):
         google.delete_task(gtask["id"])
         stats.deleted_in_gtasks += 1
+    # A voice capture stays until its Todoist task is done: Google cannot say whether
+    # it repeats, and removing a recurring one makes Google create the next instance.
+
+
+def _recurring_twin(todoist: Todoist, ttask: Task) -> Task | None:
+    if not is_recurring(ttask):
+        return None
+    return next(
+        (
+            other
+            for other in todoist.recurring_tasks()
+            if other["id"] != ttask["id"]
+            and other["content"] == ttask["content"]
+            and other["due"].get("string") == ttask["due"].get("string")
+        ),
+        None,
+    )
 
 
 def _record_error(stats: Stats, subject: str, exc: Exception) -> None:

@@ -81,6 +81,12 @@ class DryRunTodoist:
     def close_task(self, task_id: str) -> None:
         _would(f"close Todoist task {task_id}")
 
+    def delete_task(self, task_id: str) -> None:
+        _would(f"delete Todoist task {task_id}")
+
+    def recurring_tasks(self) -> list[Task]:
+        return self._real.recurring_tasks()
+
 
 def configure_logging() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")

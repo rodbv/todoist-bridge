@@ -53,9 +53,18 @@ class TodoistClient:
     def close_task(self, task_id: str) -> None:
         self._request("POST", f"/tasks/{task_id}/close", missing_ok=True)
 
+    def delete_task(self, task_id: str) -> None:
+        self._request("DELETE", f"/tasks/{task_id}", missing_ok=True)
+
+    def recurring_tasks(self) -> list[Task]:
+        return self._filter("recurring")
+
     def _candidate_tasks(self) -> list[Task]:
+        return self._filter(CANDIDATES_FILTER)
+
+    def _filter(self, query: str) -> list[Task]:
         tasks: list[Task] = []
-        params = {"query": CANDIDATES_FILTER, "limit": "200"}
+        params = {"query": query, "limit": "200"}
         while True:
             body = self._request("GET", "/tasks/filter", params=params)
             if isinstance(body, list):
