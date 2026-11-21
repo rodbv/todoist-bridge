@@ -14,7 +14,11 @@ SAVED_INFO_PT = (
     "exatamente como eu falei. Nunca remova do título as expressões de data, hora ou "
     "repetição. Nunca crie tarefas recorrentes no Google Tasks: escreva a repetição "
     'no título, por exemplo "tomar remédio todo dia às 22h15", e o Todoist cuida da '
-    "repetição. Não use o Google Keep nem lembretes do Assistente."
+    "repetição. Para mudar a data ou a hora de uma tarefa, renomeie a tarefa com a "
+    'nova data e hora, por exemplo "marcar PTO às 16h", e nunca altere só o campo de '
+    "data ou hora. Quando eu perguntar pelas minhas tarefas ou pelo Todoist, leia a "
+    "lista Minhas tarefas do Google Tasks. Não use o Google Keep nem lembretes do "
+    "Assistente."
 )
 
 SAVED_INFO_EN = (
@@ -26,7 +30,10 @@ SAVED_INFO_EN = (
     "recurrence exactly as I said them. Never remove date, time or recurrence "
     "expressions from the title. Never create recurring tasks in Google Tasks: write "
     'the recurrence in the title, for example "take my medicine every day at '
-    '10:15pm", and Todoist handles the repetition. Do not use Google Keep or '
+    '10:15pm", and Todoist handles the repetition. To change the date or time of a '
+    'task, rename the task with the new date and time, for example "book PTO at 4pm", '
+    "and never change only the date or time field. When I ask about my tasks or about "
+    "Todoist, read the My Tasks list in Google Tasks. Do not use Google Keep or "
     "Assistant reminders."
 )
 
