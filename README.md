@@ -10,8 +10,9 @@ Gemini (Android Auto, Google Assistant) creates, reads aloud and completes Googl
 - **Today's list:** Todoist tasks due today or overdue appear in Google Tasks, so "what are my tasks for today?" reads your Todoist tasks.
 - **Completion:** completing a task on either side completes it on the other.
 - **Rescheduling:** when a task the bridge copied into Google Tasks moves to a future date in Todoist, the bridge deletes the copy. A task you created by voice stays in Google Tasks until it is done in Todoist, because Google may repeat it: deleting a recurring Google task makes Google create its next instance. While it waits, it takes its title and date from Todoist.
+- **Renaming in Google Tasks:** a new title in Google Tasks goes to Todoist through Quick Add, so "Marcar PTO às 16h" moves the Todoist task to 16:00. This is the only way to change a time from Google: the Google Tasks API keeps the date of a task and drops its time.
 
-Todoist is the source of truth. Google Tasks holds only what is due now. If you edit a title in Google Tasks, the next sync puts the Todoist title back. The Todoist id of each mirrored task lives in the Google task notes (`todoist:<id>`), so the bridge needs no database.
+Todoist is the source of truth. Google Tasks holds only what is due now. If you change a title in both apps between two syncs, the most recent change wins. The Todoist id of each mirrored task lives in the Google task notes (`todoist:<id>`), so the bridge needs no database.
 
 ## Setup
 
@@ -109,6 +110,8 @@ Gemini follows Saved Info most of the time, not always. If a task reaches Todois
 ## Limitations
 
 - If Gemini creates a recurring Google task anyway, each new instance links to the same recurring Todoist task, as long as Todoist parsed the recurrence too.
+- If you change only the date or time field of a task in the Google Tasks app, or Gemini does, Todoist keeps its own date and time. Rename the task with the new date and time instead.
+- If you rename a recurring task in Google Tasks with a one-time date, such as "tomar remédio às 23h", Todoist takes the new title and keeps the recurrence.
 - The `todoist:<id>` marker is visible in the task notes if you open the Google Tasks app.
 - Gemini can complete only tasks that are in Google Tasks: Todoist tasks due today or overdue, plus the tasks you created by voice.
 - A task completed in Google Tasks before the next sync, and never synced, does not reach Todoist.

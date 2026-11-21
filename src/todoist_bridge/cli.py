@@ -75,6 +75,10 @@ class DryRunTodoist:
         _would(f"set Todoist due date on {task_id}", date=date)
         return {"id": task_id, "content": "(dry run)", "due": {"date": date}}
 
+    def update_task(self, task_id: str, **fields: Any) -> Task:
+        _would(f"update Todoist task {task_id}", **fields)
+        return {"id": task_id, "content": fields.get("content", "(dry run)"), "due": None}
+
     def due_tasks(self) -> list[Task]:
         return self._real.due_tasks()
 

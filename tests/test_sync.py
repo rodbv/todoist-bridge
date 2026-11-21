@@ -64,7 +64,7 @@ def test_voice_capture_creates_todoist_task_and_links_the_google_task(google, to
 
     ttask = next(iter(todoist.tasks.values()))
     assert ttask["content"] == "comprar leite"
-    assert ttask["due"] == {"date": "2026-11-19"}
+    assert todoist_due_date(ttask) == "2026-11-19"
     assert google.tasks[gtask["id"]]["title"] == "comprar leite"
     assert linked_todoist_id(google.tasks[gtask["id"]]) == ttask["id"]
     assert stats.created_in_todoist == 1
@@ -223,7 +223,7 @@ def test_rescheduling_in_todoist_deletes_the_google_copy_without_closing(google,
 def test_renaming_in_todoist_updates_the_google_title(google, todoist):
     ttask = todoist.add("pagar boleto", due="2026-11-19")
     run(google, todoist)
-    todoist.tasks[ttask["id"]]["content"] = "pagar boleto da luz"
+    todoist.update_task(ttask["id"], content="pagar boleto da luz")
 
     stats = run(google, todoist)
 
@@ -320,3 +320,87 @@ def test_voice_capture_kept_in_google_follows_its_todoist_due_date(google, todoi
 
     assert google.tasks[gtask["id"]]["due"].startswith("2026-11-25")
     assert stats.updated_in_gtasks == 1
+
+
+def test_renaming_in_google_with_a_new_time_reschedules_the_todoist_task(google, todoist):
+    gtask = google.add("Marcar PTO hoje")
+    run(google, todoist)
+    (tid,) = todoist.tasks
+    google.update_task(gtask["id"], title="Marcar PTO às 16h")
+
+    stats = run(google, todoist)
+
+    (ttask,) = todoist.tasks.values()
+    assert ttask["id"] == tid
+    assert ttask["content"] == "Marcar PTO"
+    assert ttask["due"]["date"] == "2026-11-19T16:00:00"
+    assert google.tasks[gtask["id"]]["title"] == "Marcar PTO"
+    assert stats.updated_in_todoist == 1
+
+
+def test_renaming_in_google_without_a_date_keeps_the_todoist_due_date(google, todoist):
+    ttask = todoist.add("pagar boleto", due="2026-11-19T15:00:00")
+    run(google, todoist)
+    (gtask,) = google.tasks.values()
+    google.update_task(gtask["id"], title="pagar boleto da luz")
+
+    run(google, todoist)
+
+    assert todoist.tasks[ttask["id"]]["content"] == "pagar boleto da luz"
+    assert todoist.tasks[ttask["id"]]["due"] == {"date": "2026-11-19T15:00:00"}
+
+
+def test_renaming_in_todoist_after_google_keeps_the_todoist_title(google, todoist):
+    ttask = todoist.add("pagar boleto", due="2026-11-19")
+    run(google, todoist)
+    (gtask,) = google.tasks.values()
+    google.update_task(gtask["id"], title="pagar boleto amanhã")
+    todoist.update_task(ttask["id"], content="pagar boleto da luz")
+
+    run(google, todoist)
+
+    assert google.tasks[gtask["id"]]["title"] == "pagar boleto da luz"
+    assert todoist.tasks[ttask["id"]]["due"] == {"date": "2026-11-19"}
+
+
+def test_second_run_after_a_google_rename_writes_nothing(google, todoist):
+    gtask = google.add("Marcar PTO hoje")
+    run(google, todoist)
+    google.update_task(gtask["id"], title="Marcar PTO às 16h")
+    run(google, todoist)
+
+    run(google, todoist)
+
+    assert google.writes == []
+    assert todoist.writes == []
+
+
+def test_renaming_a_recurring_task_in_google_with_a_one_off_time_keeps_the_recurrence(
+    google, todoist
+):
+    ttask = todoist.add("tomar remédio", due="2026-11-19")
+    ttask["due"].update(string="todo dia", is_recurring=True)
+    run(google, todoist)
+    (gtask,) = google.tasks.values()
+    google.update_task(gtask["id"], title="tomar remédio às 16h")
+
+    run(google, todoist)
+
+    assert todoist.tasks[ttask["id"]]["due"]["string"] == "todo dia"
+    assert google.tasks[gtask["id"]]["title"] == "tomar remédio"
+
+
+def test_failed_google_rename_deletes_the_temporary_quick_add_task(google, todoist, monkeypatch):
+    ttask = todoist.add("pagar boleto", due="2026-11-19")
+    run(google, todoist)
+    (gtask,) = google.tasks.values()
+    google.update_task(gtask["id"], title="pagar boleto às 16h")
+
+    def fail(task_id, **fields):
+        raise RuntimeError("Todoist is down")
+
+    monkeypatch.setattr(todoist, "update_task", fail)
+    stats = run(google, todoist)
+
+    assert list(todoist.tasks) == [ttask["id"]]
+    assert len(stats.errors) == 1

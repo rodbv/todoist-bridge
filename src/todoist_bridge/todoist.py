@@ -37,6 +37,9 @@ class TodoistClient:
     def set_due_date(self, task_id: str, date: str) -> Task:
         return self._request("POST", f"/tasks/{task_id}", json={"due_date": date})
 
+    def update_task(self, task_id: str, **fields: Any) -> Task:
+        return self._request("POST", f"/tasks/{task_id}", json=fields)
+
     def due_tasks(self) -> list[Task]:
         """Return active tasks due today or overdue, in the user's Todoist timezone."""
         today = self._clock(self._user_timezone()).date().isoformat()

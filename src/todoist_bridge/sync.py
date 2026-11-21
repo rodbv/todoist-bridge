@@ -38,6 +38,7 @@ class GoogleTasks(Protocol):
 class Todoist(Protocol):
     def quick_add(self, text: str) -> Task: ...
     def set_due_date(self, task_id: str, date: str) -> Task: ...
+    def update_task(self, task_id: str, **fields: Any) -> Task: ...
     def due_tasks(self) -> list[Task]: ...
     def get_task(self, task_id: str) -> Task | None: ...
     def close_task(self, task_id: str) -> None: ...
@@ -48,6 +49,7 @@ class Todoist(Protocol):
 @dataclass
 class Stats:
     created_in_todoist: int = 0
+    updated_in_todoist: int = 0
     closed_in_todoist: int = 0
     created_in_gtasks: int = 0
     updated_in_gtasks: int = 0
@@ -122,7 +124,7 @@ def sync(google: GoogleTasks, todoist: Todoist, now: datetime) -> Stats:
             elif not pending and tid is not None:
                 _close_in_todoist(google, todoist, gtask, tid, closed_ids, stats)
             elif pending and tid in due_in_todoist:
-                _refresh_mirror(google, gtask, due_in_todoist[tid], stats)
+                _refresh_mirror(google, todoist, gtask, due_in_todoist[tid], stats)
             elif pending:
                 _retire_mirror(google, todoist, gtask, tid, stats)
         except Exception as exc:
@@ -198,7 +200,12 @@ def _still_open_at_google_occurrence(ttask: Task | None, gtask: Task) -> bool:
     return True
 
 
-def _refresh_mirror(google: GoogleTasks, gtask: Task, ttask: Task, stats: Stats) -> None:
+def _refresh_mirror(
+    google: GoogleTasks, todoist: Todoist, gtask: Task, ttask: Task, stats: Stats
+) -> None:
+    if gtask.get("title") != ttask["content"] and _edited_in_google_last(gtask, ttask):
+        ttask = _rename_in_todoist(todoist, gtask, ttask)
+        stats.updated_in_todoist += 1
     changes: dict[str, Any] = {}
     if gtask.get("title") != ttask["content"]:
         changes["title"] = ttask["content"]
@@ -208,6 +215,31 @@ def _refresh_mirror(google: GoogleTasks, gtask: Task, ttask: Task, stats: Stats)
     if changes:
         google.update_task(gtask["id"], **changes)
         stats.updated_in_gtasks += 1
+
+
+def _edited_in_google_last(gtask: Task, ttask: Task) -> bool:
+    google_time, todoist_time = gtask.get("updated"), ttask.get("updated_at")
+    if not (google_time and todoist_time):
+        return False
+    return datetime.fromisoformat(google_time) > datetime.fromisoformat(todoist_time)
+
+
+def _rename_in_todoist(todoist: Todoist, gtask: Task, ttask: Task) -> Task:
+    parsed = _parse_with_quick_add(todoist, gtask.get("title") or "")
+    fields: dict[str, Any] = {"content": parsed["content"]}
+    due = parsed.get("due")
+    if due and (is_recurring(parsed) or not is_recurring(ttask)):
+        fields["due_string"] = due["string"]
+        if due.get("lang"):
+            fields["due_lang"] = due["lang"]
+    return todoist.update_task(ttask["id"], **fields)
+
+
+def _parse_with_quick_add(todoist: Todoist, title: str) -> Task:
+    # Quick Add parses dates only on create, so a throwaway task does the parsing.
+    parsed = todoist.quick_add(strip_spoken_prefix(title))
+    todoist.delete_task(parsed["id"])
+    return parsed
 
 
 def _retire_mirror(
@@ -221,7 +253,7 @@ def _retire_mirror(
         google.delete_task(gtask["id"])
         stats.deleted_in_gtasks += 1
     else:
-        _refresh_mirror(google, gtask, ttask, stats)
+        _refresh_mirror(google, todoist, gtask, ttask, stats)
     # A voice capture stays until its Todoist task is done: Google cannot say whether
     # it repeats, and removing a recurring one makes Google create the next instance.
 

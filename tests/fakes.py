@@ -4,14 +4,34 @@ from __future__ import annotations
 
 import itertools
 import re
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from todoist_bridge.sync import Task, todoist_due_date
 
 TODAY = date(2026, 11, 19)
 
-_DATE_WORDS = {"amanhã": "2026-11-20", "tomorrow": "2026-11-20", "hoje": "2026-11-19"}
+_DUE_DATES = {
+    "amanhã": "2026-11-20",
+    "tomorrow": "2026-11-20",
+    "hoje": "2026-11-19",
+    "às 16h": "2026-11-19T16:00:00",
+    "todo dia": "2026-11-20",
+}
+_seconds = itertools.count(1)
+
+
+def _timestamp() -> str:
+    """One clock for both fakes, so edit times compare across apps like the real ones."""
+    instant = datetime(2026, 11, 19, 12, 0, tzinfo=UTC) + timedelta(seconds=next(_seconds))
+    return instant.isoformat().replace("+00:00", "Z")
+
+
+def _parse_due(string: str) -> dict[str, Any]:
+    due = {"date": _DUE_DATES[string], "string": string, "lang": "pt"}
+    if string == "todo dia":
+        due["is_recurring"] = True
+    return due
 
 
 class FakeGoogleTasks:
@@ -33,7 +53,13 @@ class FakeGoogleTasks:
         status: str = "needsAction",
         recurring: bool = False,
     ) -> Task:
-        task = {"id": next(self._ids), "title": title, "notes": notes, "status": status}
+        task = {
+            "id": next(self._ids),
+            "title": title,
+            "notes": notes,
+            "status": status,
+            "updated": _timestamp(),
+        }
         if due:
             task["due"] = due
         self.tasks[task["id"]] = task
@@ -54,7 +80,7 @@ class FakeGoogleTasks:
 
     def update_task(self, task_id: str, **fields: Any) -> Task:
         self.writes.append(("update", task_id))
-        self.tasks[task_id].update(fields)
+        self.tasks[task_id].update(fields, updated=_timestamp())
         if fields.get("status") == "completed":
             self._next_instance(task_id)
         return dict(self.tasks[task_id])
@@ -69,8 +95,8 @@ class FakeGoogleTasks:
 
 
 class FakeTodoist:
-    """Quick Add understands a few date words and "todo dia" (daily, next due tomorrow),
-    enough to tell dated and recurring tasks apart."""
+    """Quick Add and due strings understand a few date words, a time and "todo dia"
+    (daily, next due tomorrow), enough to tell dated, timed and recurring tasks apart."""
 
     def __init__(self) -> None:
         self.tasks: dict[str, Task] = {}
@@ -83,27 +109,35 @@ class FakeTodoist:
             "content": content,
             "checked": False,
             "due": {"date": due} if due else None,
+            "updated_at": _timestamp(),
         }
         self.tasks[task["id"]] = task
         return task
 
     def quick_add(self, text: str) -> Task:
         self.writes.append(("quick_add", text))
-        if "todo dia" in text:
-            task = self.add(text.replace("todo dia", "").strip(), due="2026-11-20")
-            task["due"].update(string="todo dia", is_recurring=True)
-            return dict(task)
-        due = None
-        for word, day in _DATE_WORDS.items():
-            if re.search(rf"\b{word}\b", text):
-                due = day
-                text = re.sub(rf"\s*\b{word}\b", "", text)
-        return dict(self.add(text.strip(), due=due))
+        task = self.add(text)
+        for string in _DUE_DATES:
+            if re.search(rf"\b{string}\b", text):
+                task["content"] = re.sub(rf"\s*\b{string}\b", "", text).strip()
+                task["due"] = _parse_due(string)
+                break
+        return dict(task)
 
     def set_due_date(self, task_id: str, date: str) -> Task:
         self.writes.append(("set_due_date", task_id))
-        self.tasks[task_id]["due"] = {"date": date}
+        self.tasks[task_id].update(due={"date": date}, updated_at=_timestamp())
         return dict(self.tasks[task_id])
+
+    def update_task(self, task_id: str, **fields: Any) -> Task:
+        self.writes.append(("update", task_id))
+        task = self.tasks[task_id]
+        if "content" in fields:
+            task["content"] = fields["content"]
+        if "due_string" in fields:
+            task["due"] = _parse_due(fields["due_string"])
+        task["updated_at"] = _timestamp()
+        return dict(task)
 
     def due_tasks(self) -> list[Task]:
         return [
@@ -125,6 +159,7 @@ class FakeTodoist:
             task["due"]["date"] = next_day.isoformat()
         else:
             task["checked"] = True
+        task["updated_at"] = _timestamp()
 
     def delete_task(self, task_id: str) -> None:
         self.writes.append(("delete", task_id))
